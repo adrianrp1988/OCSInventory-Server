@@ -29,7 +29,7 @@ use Apache::Ocsinventory::Server::Inventory::Software;
 use Apache::Ocsinventory::Interface::SoftwareCategory;
 use Apache::Ocsinventory::Interface::AssetCategory;
 use Apache::Ocsinventory::Interface::Saas;
-
+use Encode;
 use strict;
 
 require Exporter;
@@ -81,18 +81,18 @@ sub _update_inventory_section{
   my $deviceId = $Apache::Ocsinventory::CURRENT_CONTEXT{'DATABASE_ID'};
   my $result = $Apache::Ocsinventory::CURRENT_CONTEXT{'XML_ENTRY'};
   my $dbh = $Apache::Ocsinventory::CURRENT_CONTEXT{'DBI_HANDLE'};
-	
+
   # The computer exists. 
   # We check if this section has changed since the last inventory (only if activated)
   # We delete the previous entries
-  if($Apache::Ocsinventory::CURRENT_CONTEXT{'EXIST_FL'}){
+    if($Apache::Ocsinventory::CURRENT_CONTEXT{'EXIST_FL'}){
     if($ENV{'OCS_OPT_INVENTORY_DIFF'}){
       if( _has_changed($section) ){
-        &_log( 113, 'inventory', "u:$section") if $ENV{'OCS_OPT_LOGLEVEL'};
+                &_log( 113, 'inventory', "u:$section") if $ENV{'OCS_OPT_LOGLEVEL'};
         $sectionMeta->{hasChanged} = 1;
       }
       else{
-        return 0;
+                return 0;
       }
     }
     else{
@@ -105,7 +105,7 @@ sub _update_inventory_section{
     }
   }
 
-  # DEL AND REPLACE, or detect diff on elements of the section (more load on frontends, less on DB backend)
+  # DEL AND REPLACE, or detect diff on elements of the section (more load on frontends, less on DB backend)
   if($Apache::Ocsinventory::CURRENT_CONTEXT{'EXIST_FL'} && $ENV{'OCS_OPT_INVENTORY_WRITE_DIFF'} && $sectionMeta->{writeDiff}){
     my @fromDb;
     my @fromXml;
@@ -123,6 +123,8 @@ sub _update_inventory_section{
     #TODO: Sorting XML entries, to compare more quickly with DB elements
     my $new=0;
     my $del=0;
+    my $hardware_diff_added;
+    my $hardware_diff_removed;
     for my $l_xml (@fromXml){
       my $found = 0;
       for my $i_db (0..$#fromDb){
@@ -130,16 +132,24 @@ sub _update_inventory_section{
         my @line = @{$fromDb[$i_db]};
         my $comp_xml = join '', @$l_xml;
         my $comp_db = join '', @line[2..$#line];
+        $comp_xml = encode("UTF-8", $comp_xml);
+        $comp_xml =~ s/,*0+,*/,0,/g;
+        $comp_db =~ s/,*0+,*/,0,/g;
         if( $comp_db eq $comp_xml ){
           $found = 1;
           # The value has been found, we have to delete it from the db list
-          # (elements remaining will be deleted)
+          # (elements remaining will be deleted)
           delete $fromDb[$i_db];
           last;
         }
       }
       if(!$found){
         $new++;
+        if ($sectionMeta->{notifyUpdate}){
+          my $addedHardware = join ',',@$l_xml;
+          $addedHardware =~ s/,+$//;
+          $hardware_diff_added = $hardware_diff_added ne '' ? "$hardware_diff_added, \"$addedHardware\"" : "\"$addedHardware\"";
+        }
         $dbh->do( $sectionMeta->{sql_insert_string}, {}, $deviceId, @$l_xml ) or return 1;
         if( $ENV{OCS_OPT_INVENTORY_CACHE_ENABLED} && $sectionMeta->{cache} ){
           &_cache( 'add', $section, $sectionMeta, $l_xml );
@@ -149,8 +159,15 @@ sub _update_inventory_section{
     # Now we have to delete from DB elements that still remain in fromDb
     for (@fromDb){
       next if !defined (${$_}[0]);
+      if ($sectionMeta->{notifyUpdate}){
+        my @slice = @{$_};
+        splice @slice, 0, 2;
+        my $removedHardware = join ',',@slice;
+        $removedHardware =~ s/,+$//;
+        $hardware_diff_removed = $hardware_diff_removed ne '' ? "$hardware_diff_removed, \"$removedHardware\"" : "\"$removedHardware\"";
+      }
       $del++;
-      $dbh->do( $sectionMeta->{sql_delete_string}, {}, $deviceId, ${$_}[0]) or return 1;
+      $dbh->do($sectionMeta->{sql_delete_string}, {}, $deviceId, ${$_}[0]) or return 1;
       my @ldb = @$_;
       @ldb = @ldb[ 2..$#ldb ];
       if( $ENV{OCS_OPT_INVENTORY_CACHE_ENABLED} && $sectionMeta->{cache} && !$ENV{OCS_OPT_INVENTORY_CACHE_KEEP}){
@@ -158,6 +175,20 @@ sub _update_inventory_section{
       }
     }
     if( $new||$del ){
+      if ($sectionMeta->{notifyUpdate}){
+        my $hardware_diff_fields = join ',', @{$sectionMeta->{field_arrayref}};
+        $hardware_diff_fields =~ s/`/"/g;
+        my $event_id = $result->{CONTENT}->{EVENT_ID};
+        if (!$event_id){
+          my $ipaddress = $Apache::Ocsinventory::CURRENT_CONTEXT{'IPADDRESS'};
+          my $query = "INSERT INTO `hardware_change_events` (HARDWARE_ID, IP_ADDRESS, NAME, USERNAME, LAST_SCAN_DATETIME) VALUES ($deviceId, \"$ipaddress\", \"".$result->{CONTENT}->{HARDWARE}->{NAME}."\", \"".$result->{CONTENT}->{HARDWARE}->{USERID}."\", FROM_UNIXTIME(\"".$Apache::Ocsinventory::CURRENT_CONTEXT{'DETAILS'}->{'LCOME'}."\"))";
+          $dbh->do($query);
+          $event_id = $dbh->{mysql_insertid}; 
+          $result->{CONTENT}->{EVENT_ID} = $event_id;
+        }
+        my $query = "INSERT INTO `hardware_change_events_data` (EVENT_ID, SECTION, FIELDS, HARDWARE_ADDED, HARDWARE_REMOVED) VALUES ($event_id, \"$section\", \"".$dbh->quote($hardware_diff_fields)."\", \"".$dbh->quote($hardware_diff_added)."\", \"".$dbh->quote($hardware_diff_removed)."\")";
+        $dbh->do($query);
+      }
       &_log( 113, 'write_diff', "ch:$section(+$new-$del)") if $ENV{'OCS_OPT_LOGLEVEL'};
     }
   }
@@ -166,7 +197,7 @@ sub _update_inventory_section{
     my $sth = $dbh->prepare( $sectionMeta->{sql_insert_string} );
     # Multi lines (forceArray)
     my $refXml = $result->{CONTENT}->{uc $section};
-    
+
     if($sectionMeta->{multi}){
       for my $line (@$refXml){
         &_get_bind_values($line, $sectionMeta, \@bind_values);
@@ -192,5 +223,5 @@ sub _update_inventory_section{
   }
   $dbh->commit unless $ENV{'OCS_OPT_INVENTORY_TRANSACTION'};
   0;
-}
+  }
 1;

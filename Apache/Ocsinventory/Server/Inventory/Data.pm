@@ -61,6 +61,7 @@ sub _init_map{
     $sectionsMeta->{$section}->{mask} = $DATA_MAP{$section}->{mask};
     $sectionsMeta->{$section}->{delOnReplace} = 1 if $DATA_MAP{$section}->{delOnReplace};
     $sectionsMeta->{$section}->{writeDiff} = 1 if $DATA_MAP{$section}->{writeDiff};
+    $sectionsMeta->{$section}->{notifyUpdate} = 1 if $DATA_MAP{$section}->{notifyUpdate};
     $sectionsMeta->{$section}->{cache} = 1 if $DATA_MAP{$section}->{cache};
     $sectionsMeta->{$section}->{mandatory} = 1 if $DATA_MAP{$section}->{mandatory};
     $sectionsMeta->{$section}->{auto} = 1 if $DATA_MAP{$section}->{auto};
