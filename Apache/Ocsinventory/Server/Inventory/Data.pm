@@ -91,7 +91,11 @@ sub _init_map{
       if(defined $DATA_MAP{$section}->{fields}->{$field}->{type}){
         $sectionsMeta->{$section}->{fields}->{$field}->{type} = $DATA_MAP{$section}->{fields}->{$field}->{type};
       }   
- 
+      
+      if(defined $DATA_MAP{$section}->{fields}->{$field}->{noDiffCmp}){
+        $sectionsMeta->{$section}->{fields}->{$field}->{noDiffCmp} = $DATA_MAP{$section}->{fields}->{$field}->{noDiffCmp};
+      }
+  
       $field_index++;      
     }
     # Build the "DBI->prepare" sql insert string 

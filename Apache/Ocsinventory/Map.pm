@@ -29,7 +29,7 @@ our @ISA = qw /Exporter/;
 
 our @EXPORT = qw / %DATA_MAP /;
 
-# Field's attributes : cache, filter, noXml, noSql, fallback, type
+# Field's attributes : cache, filter, noXml, noSql, fallback, type, noDiffCmp
 
 our %DATA_MAP= (
   hardware => {
@@ -239,10 +239,10 @@ our %DATA_MAP= (
        MODEL => {},
        DESCRIPTION => {},
        TYPE => {},
-       DISKSIZE => { fallback=>0 },
+       DISKSIZE => { fallback=>0, noDiffCmp=>1 },
        SERIALNUMBER => {},
        FIRMWARE => {}
-   }
+      }
   },
 
   drives => {

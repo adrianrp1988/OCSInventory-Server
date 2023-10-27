@@ -120,6 +120,13 @@ sub _update_inventory_section{
       push @fromXml, [ @bind_values ];
       @bind_values = ();
     }
+    # Prevent false positives by skipping some fields at comparison, use a field mask
+    my @fields_comparison_mask;
+    foreach my $field (@{$sectionMeta->{field_arrayref}}){
+      $field =~ s/\`//g;
+	    push @fields_comparison_mask, $sectionMeta->{fields}->{$field}->{noDiffCmp} ? 1 : 0;
+    }
+    
     #TODO: Sorting XML entries, to compare more quickly with DB elements
     my $new=0;
     my $del=0;
@@ -127,14 +134,14 @@ sub _update_inventory_section{
     my $hardware_diff_removed;
     for my $l_xml (@fromXml){
       my $found = 0;
+      my @line_xml = map { $fields_comparison_mask[$_] ? "*" : @{$l_xml}[$_] } 0..$#{$l_xml};
+      my $comp_xml = encode("UTF-8", (join '|', @line_xml));
       for my $i_db (0..$#fromDb){
         next unless $fromDb[$i_db];
         my @line = @{$fromDb[$i_db]};
-        my $comp_xml = join '', @$l_xml;
-        my $comp_db = join '', @line[2..$#line];
-        $comp_xml = encode("UTF-8", $comp_xml);
-        $comp_xml =~ s/,*0+,*/,0,/g;
-        $comp_db =~ s/,*0+,*/,0,/g;
+	      splice(@line, 0, 2);
+        my @line_db = map { $fields_comparison_mask[$_] ? "*" : @line[$_] } 0..$#{line};
+        my $comp_db = join '|', @line_db;
         if( $comp_db eq $comp_xml ){
           $found = 1;
           # The value has been found, we have to delete it from the db list
@@ -189,7 +196,7 @@ sub _update_inventory_section{
         my $query = "INSERT INTO `hardware_change_events_data` (EVENT_ID, SECTION, FIELDS, HARDWARE_ADDED, HARDWARE_REMOVED) VALUES ($event_id, \"$section\", \"".$dbh->quote($hardware_diff_fields)."\", \"".$dbh->quote($hardware_diff_added)."\", \"".$dbh->quote($hardware_diff_removed)."\")";
         $dbh->do($query);
       }
-      &_log( 113, 'write_diff', "ch:$section(+$new-$del)") if $ENV{'OCS_OPT_LOGLEVEL'};
+            &_log( 113, 'write_diff', "ch:$section(+$new-$del)") if $ENV{'OCS_OPT_LOGLEVEL'};
     }
   }
   else{
