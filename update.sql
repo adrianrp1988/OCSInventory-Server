@@ -18,3 +18,10 @@ CREATE TABLE `hardware_change_events_data` (
   `HARDWARE_ADDED` text NOT NULL,
   `HARDWARE_REMOVED` text NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `hardware_change_events_filters` (
+  `ID` int(11) NOT NULL AUTO_INCREMENT,
+  `SECTION` varchar(100) NOT NULL,
+  `FILTER` varchar(255) NOT NULL,
+  PRIMARY KEY (`ID`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Store filters applied to every item on sections at cpm time when detecting hardware changes';
