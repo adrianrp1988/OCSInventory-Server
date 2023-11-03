@@ -158,7 +158,7 @@ sub _update_inventory_section{
       	if (!$is_filtered){
           $new++;
           if ($sectionMeta->{notifyUpdate}){
-            $hardware_diff_added = $hardware_diff_added ne '' ? "$hardware_diff_added, \"$addedHardware\"" : "\"$addedHardware\"";
+            $hardware_diff_added = $hardware_diff_added ne '' ? "$hardware_diff_added|$addedHardware" : "$addedHardware";
           }
         }
         $dbh->do( $sectionMeta->{sql_insert_string}, {}, $deviceId, @$l_xml ) or return 1;
@@ -178,7 +178,7 @@ sub _update_inventory_section{
       my $is_filtered = grep { index($removedHardware, $_) != -1 } @db_section_filters;
       if (!$is_filtered){
         if ($sectionMeta->{notifyUpdate}){
-          $hardware_diff_removed = $hardware_diff_removed ne '' ? "$hardware_diff_removed, \"$removedHardware\"" : "\"$removedHardware\"";
+          $hardware_diff_removed = $hardware_diff_removed ne '' ? "$hardware_diff_removed|$removedHardware" : "$removedHardware";
         }
         $del++;
       }
@@ -192,7 +192,7 @@ sub _update_inventory_section{
     if( $new||$del ){
       if ($sectionMeta->{notifyUpdate}){
         my $hardware_diff_fields = join ',', @{$sectionMeta->{field_arrayref}};
-        $hardware_diff_fields =~ s/`/"/g;
+        $hardware_diff_fields =~ s/`//g;
         my $event_id = $result->{CONTENT}->{EVENT_ID};
         if (!$event_id){
           my $ipaddress = $Apache::Ocsinventory::CURRENT_CONTEXT{'IPADDRESS'};
@@ -201,7 +201,7 @@ sub _update_inventory_section{
           $event_id = $dbh->{mysql_insertid}; 
           $result->{CONTENT}->{EVENT_ID} = $event_id;
         }
-        my $query = "INSERT INTO `hardware_change_events_data` (EVENT_ID, SECTION, FIELDS, HARDWARE_ADDED, HARDWARE_REMOVED) VALUES ($event_id, \"$section\", \"".$dbh->quote($hardware_diff_fields)."\", \"".$dbh->quote($hardware_diff_added)."\", \"".$dbh->quote($hardware_diff_removed)."\")";
+        my $query = "INSERT INTO `hardware_change_events_data` (EVENT_ID, SECTION, FIELDS, HARDWARE_ADDED, HARDWARE_REMOVED) VALUES ($event_id, \"$section\", ".$dbh->quote($hardware_diff_fields).", ".$dbh->quote($hardware_diff_added).", ".$dbh->quote($hardware_diff_removed).")";
         $dbh->do($query);
       }
       &_log( 113, 'write_diff', "ch:$section(+$new-$del)") if $ENV{'OCS_OPT_LOGLEVEL'};
