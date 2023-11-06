@@ -152,8 +152,8 @@ sub _update_inventory_section{
         }
       }
       if(!$found){
-        my $addedHardware = join ',',@$l_xml;
-        $addedHardware =~ s/,+$//;
+        my @slice = map { $_ eq '' ? ' ' : $_ } @$l_xml;
+        my $addedHardware = join ',',@slice;
         my $is_filtered = grep { index($addedHardware, $_) != -1 } @db_section_filters;
       	if (!$is_filtered){
           $new++;
@@ -172,8 +172,8 @@ sub _update_inventory_section{
       next if !defined (${$_}[0]);
       my @slice = @{$_};
       splice @slice, 0, 2;
+      @slice = map { $_ eq '' ? ' ' : $_ } @slice;
       my $removedHardware = join ',',@slice;
-      $removedHardware =~ s/,+$//;
       #Collect items that where removed since last report
       my $is_filtered = grep { index($removedHardware, $_) != -1 } @db_section_filters;
       if (!$is_filtered){
