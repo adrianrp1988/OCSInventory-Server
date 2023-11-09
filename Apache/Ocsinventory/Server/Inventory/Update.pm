@@ -135,13 +135,13 @@ sub _update_inventory_section{
     my $hardware_diff_removed;
     for my $l_xml (@fromXml){
       my $found = 0;
-      my @line_xml = map { $sectionMeta->{fields}->{@{$sectionMeta->{field_arrayref}}[$_]}->{noDiffCmp} ? "" : encode ("UTF-8", @{$l_xml}[$_]) } 0..$#{$l_xml};
+      my @line_xml = map { $sectionMeta->{fields}->{substr(@{$sectionMeta->{field_arrayref}}[$_], 1, -1)}->{noDiffCmp} ? "" : encode ("UTF-8", @{$l_xml}[$_]) } 0..$#{$l_xml};
       my $comp_xml = join '|', @line_xml;
       for my $i_db (0..$#fromDb){
         next unless $fromDb[$i_db];
         my @line = @{$fromDb[$i_db]};
         splice(@line, 0, 2);
-        my @line_db = map { $sectionMeta->{fields}->{@{$sectionMeta->{field_arrayref}}[$_]}->{noDiffCmp} ? "" : @line[$_] } 0..$#{line};
+        my @line_db =  map { $sectionMeta->{fields}->{substr(@{$sectionMeta->{field_arrayref}}[$_], 1, -1)}->{noDiffCmp} ? "" : @line[$_] } 0..$#{line};
         my $comp_db = join '|', @line_db;
         if( $comp_db eq $comp_xml ){
           $found = 1;
@@ -152,7 +152,7 @@ sub _update_inventory_section{
         }
       }
       if(!$found){
-        my @slice = map { $_ eq '' ? ' ' : $_ } @$l_xml;
+        my @slice = map { $_ eq '' ? ' ' : $_ } @line_xml;
         my $addedHardware = join ',',@slice;
         my $is_filtered = grep { index($addedHardware, $_) != -1 } @db_section_filters;
       	if (!$is_filtered){
@@ -170,8 +170,15 @@ sub _update_inventory_section{
     # Now we have to delete from DB elements that still remain in fromDb
     for (@fromDb){
       next if !defined (${$_}[0]);
-      my @slice = @{$_};
-      splice @slice, 0, 2;
+
+      $dbh->do($sectionMeta->{sql_delete_string}, {}, $deviceId, ${$_}[0]) or return 1;
+      my @ldb = @$_;
+      @ldb = @ldb[ 2..$#ldb ];
+      if( $ENV{OCS_OPT_INVENTORY_CACHE_ENABLED} && $sectionMeta->{cache} && !$ENV{OCS_OPT_INVENTORY_CACHE_KEEP}){
+        &_cache( 'del', $section, $sectionMeta, \@ldb );
+      }
+      
+      my @slice = map { $sectionMeta->{fields}->{substr(@{$sectionMeta->{field_arrayref}}[$_], 1, -1)}->{noDiffCmp} ? "" : @{ldb}[$_] } 0..$#{ldb};
       @slice = map { $_ eq '' ? ' ' : $_ } @slice;
       my $removedHardware = join ',',@slice;
       #Collect items that where removed since last report
@@ -182,12 +189,7 @@ sub _update_inventory_section{
         }
         $del++;
       }
-      $dbh->do($sectionMeta->{sql_delete_string}, {}, $deviceId, ${$_}[0]) or return 1;
-      my @ldb = @$_;
-      @ldb = @ldb[ 2..$#ldb ];
-      if( $ENV{OCS_OPT_INVENTORY_CACHE_ENABLED} && $sectionMeta->{cache} && !$ENV{OCS_OPT_INVENTORY_CACHE_KEEP}){
-        &_cache( 'del', $section, $sectionMeta, \@ldb );
-      }
+      
     }
     if( $new||$del ){
       if ($sectionMeta->{notifyUpdate}){

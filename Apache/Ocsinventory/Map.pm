@@ -237,12 +237,12 @@ our %DATA_MAP= (
        MANUFACTURER => {},
        NAME => {},
        MODEL => {},
-       DESCRIPTION => {},
+       DESCRIPTION => { noDiffCmp=>1 },
        TYPE => {},
        DISKSIZE => { fallback=>0, noDiffCmp=>1 },
        SERIALNUMBER => {},
        FIRMWARE => {}
-      }
+   }
   },
 
   drives => {
